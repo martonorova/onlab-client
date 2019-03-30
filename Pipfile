@@ -9,6 +9,11 @@ verify_ssl = true
 click = "*"
 numpy = "*"
 requests = "*"
+pandas = "*"
+matplotlib = "*"
+tkinter = "*"
+statsmodels = "*"
+scipy = "*"
 
 [requires]
 python_version = "3.6"
