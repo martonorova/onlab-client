@@ -30,18 +30,22 @@ def cli():
 
 @cli.command()
 @click.option('--pattern-row', default=0,
-              help="Select the row of input data to use to generate load (train_1.csv")
+              help="Select the row of input data to use to generate load")
 @click.option('--input-len', default=100,
               help="Length of input data")
 @click.option('--predict-num', default=1,
               help="Number of predicted values")
-@click.option('--AR', default=5,
+@click.option('--ar', default=5,
               help="Autoregressive component of the ARIMA model")
-@click.option('--I', default=1,
+@click.option('--i', default=1,
               help="Integrated component of the ARIMA model")
-@click.option('--MA', default=0,
+@click.option('--ma', default=0,
               help="Moving average component of the ARIMA model")
-def predict(pattern_row, input_len, predict_num, AR, I, MA):
+def run_predict(pattern_row, input_len, predict_num, ar, i, ma):
+    predict(pattern_row, input_len, predict_num, ar, i, ma)
+
+
+def predict(pattern_row, input_len, predict_num, ar, i, ma):
     data_frame = read_csv('data/train_1.csv', header=0, index_col=0)
     series = data_frame.iloc[pattern_row]
 
@@ -74,7 +78,7 @@ def predict(pattern_row, input_len, predict_num, AR, I, MA):
 
     learning_series = pandas.Series(learning_values)
     # fit model
-    model = ARIMA(np.asarray(learning_series), order=(AR, I, MA))
+    model = ARIMA(np.asarray(learning_series), order=(ar, i, ma))
     model_fit = model.fit(disp=0)
 
     print(model_fit.forecast(predict_num)[0])
@@ -116,6 +120,14 @@ class ARIMATestCase(object):
         self.predict_num = predict_num
 
     def test(self):
+        print("pr: {}, il: {}, pn: {}, AR: {}, I: {}, MA: {}".format(
+            self.pattern_row,
+            self.input_len,
+            self.predict_num,
+            self.AR,
+            self.I,
+            self.MA
+        ))
         res = predict(self.pattern_row,
                       self.input_len,
                       self.predict_num,
@@ -128,7 +140,7 @@ class ARIMATestCase(object):
                                smape=res[2])
 
     def __str__(self):
-        return "patt_row: {}, input_len: {}, predict_num: {}, AR: {}, I: {}, MA: {}".format(
+        return "patt_row: {}, input_len: {}, predict_num: {}, || AR: {}, I: {}, MA: {}".format(
             self.pattern_row,
             self.input_len,
             self.predict_num,
@@ -141,34 +153,49 @@ class ARIMATestCase(object):
 @cli.command()
 def run_tests():
     pattern_row = 0
-    data_frame = read_csv('data/train_1.csv', header=0, index_col=0)
+   # data_frame = read_csv('data/train_1.csv', header=0, index_col=0)
 
    # series = data_frame.iloc[pattern_row]
 
     test_results = list()
 
-    for ar in range(2):
+    for ar in range(1, 4):
         for i in range(2):
-            for ma in range(2):
-                input_len = 2
-                predict_num = 2
+            for ma in range(4):
+                print("Test case started.")
+                input_len = 10
+                predict_num = 5
                 test_case = ARIMATestCase(pattern_row=pattern_row,
                                                   input_len=input_len,
                                                   predict_num=predict_num,
                                                   AR=ar,
                                                   I=i,
                                                   MA=ma)
-                res = test_case.test()
+                try:
+                    res = test_case.test()
+                except Exception as e:
+                    print(e)
+                    print("Test case ended, waiting the webapp to recover.")
+                    time.sleep(20)
+                    continue
 
                 test_results.append((res, test_case))
+                # wait before starting the next round
+                print("Test case ended, waiting the webapp to recover.")
+                time.sleep(20)
 
     test_results.sort(key=lambda record: record[0].smape)
+    print("CREATE/OPEN FILE")
     file = open("test_results.txt", "w")
     for result in test_results:
-        file.write(str(result))
+        file.write(str(result[0]) + ' || ' + str(result[1]) + '\n')
+        #file.write(str(result))
 
     file.close()
+    print("FILE CLOSED")
 
 
 if __name__ == '__main__':
     cli()
+
+
