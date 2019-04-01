@@ -12,6 +12,11 @@ from statsmodels.tsa.arima_model import ARIMA
 webapp_url = os.getenv("ONLAB_WEBAPP_URL", "http://localhost:8080/time")
 
 
+def load_input_data_series(pattern_row):
+    data_frame = read_csv('data/train_1_row_1.csv', header=0, index_col=0)
+    return data_frame.iloc[pattern_row]
+
+
 def smape(predicted_list, actual_list):
     assert len(predicted_list) == len(actual_list)
     sum_val = 0
@@ -42,12 +47,14 @@ def cli():
 @click.option('--ma', default=0,
               help="Moving average component of the ARIMA model")
 def run_predict(pattern_row, input_len, predict_num, ar, i, ma):
-    predict(pattern_row, input_len, predict_num, ar, i, ma)
+    series = load_input_data_series(pattern_row)
+    predict(series, pattern_row, input_len, predict_num, ar, i, ma)
 
 
-def predict(pattern_row, input_len, predict_num, ar, i, ma):
-    data_frame = read_csv('data/train_1.csv', header=0, index_col=0)
-    series = data_frame.iloc[pattern_row]
+def predict(series, pattern_row, input_len, predict_num, ar, ir, ma):
+    print(series)
+    #  data_frame = read_csv('data/train_1.csv', header=0, index_col=0)
+    # series = data_frame.iloc[pattern_row]
 
     if input_len > series.size:
         input_len = series.size
@@ -78,7 +85,7 @@ def predict(pattern_row, input_len, predict_num, ar, i, ma):
 
     learning_series = pandas.Series(learning_values)
     # fit model
-    model = ARIMA(np.asarray(learning_series), order=(ar, i, ma))
+    model = ARIMA(np.asarray(learning_series), order=(ar, ir, ma))
     model_fit = model.fit(disp=0)
 
     print(model_fit.forecast(predict_num)[0])
@@ -119,25 +126,25 @@ class ARIMATestCase(object):
         self.input_len = input_len
         self.predict_num = predict_num
 
-    def test(self):
-        print("pr: {}, il: {}, pn: {}, AR: {}, I: {}, MA: {}".format(
-            self.pattern_row,
-            self.input_len,
-            self.predict_num,
-            self.AR,
-            self.I,
-            self.MA
-        ))
-        res = predict(self.pattern_row,
-                      self.input_len,
-                      self.predict_num,
-                      self.AR,
-                      self.I,
-                      self.MA)
-
-        return ARIMATestResult(predicted_values=res[0],
-                               actual_values=res[1],
-                               smape=res[2])
+    # def test(self):
+    #     print("pr: {}, il: {}, pn: {}, AR: {}, I: {}, MA: {}".format(
+    #         self.pattern_row,
+    #         self.input_len,
+    #         self.predict_num,
+    #         self.AR,
+    #         self.I,
+    #         self.MA
+    #     ))
+    #     res = predict(self.pattern_row,
+    #                   self.input_len,
+    #                   self.predict_num,
+    #                   self.AR,
+    #                   self.I,
+    #                   self.MA)
+    #
+    #     return ARIMATestResult(predicted_values=res[0],
+    #                            actual_values=res[1],
+    #                            smape=res[2])
 
     def __str__(self):
         return "patt_row: {}, input_len: {}, predict_num: {}, || AR: {}, I: {}, MA: {}".format(
@@ -153,18 +160,20 @@ class ARIMATestCase(object):
 @cli.command()
 def run_tests():
     pattern_row = 0
-   # data_frame = read_csv('data/train_1.csv', header=0, index_col=0)
+    series = load_input_data_series(pattern_row)
+    # data_frame = read_csv('data/train_1.csv', header=0, index_col=0)
 
-   # series = data_frame.iloc[pattern_row]
+    # series = data_frame.iloc[pattern_row]
 
     test_results = list()
 
-    for ar in range(1, 4):
+    for ar in range(1, 6):
         for i in range(2):
             for ma in range(4):
                 print("Test case started.")
-                input_len = 10
+                input_len = 5
                 predict_num = 5
+
                 test_case = ARIMATestCase(pattern_row=pattern_row,
                                                   input_len=input_len,
                                                   predict_num=predict_num,
@@ -172,14 +181,35 @@ def run_tests():
                                                   I=i,
                                                   MA=ma)
                 try:
-                    res = test_case.test()
+                    # res = test_case.test()
+                    print("pr: {}, il: {}, pn: {}, AR: {}, I: {}, MA: {}".format(
+                                 pattern_row,
+                                 input_len,
+                                 predict_num,
+                                 ar,
+                                 i,
+                                 ma
+                             ))
+                    res = predict(series,
+                                  test_case.pattern_row,
+                                  test_case.input_len,
+                                  test_case.predict_num,
+                                  test_case.AR,
+                                  test_case.I,
+                                  test_case.MA)
+
+                    test_result = ARIMATestResult(
+                        predicted_values=res[0],
+                        actual_values=res[1],
+                        smape=res[2]
+                    )
                 except Exception as e:
                     print(e)
                     print("Test case ended, waiting the webapp to recover.")
                     time.sleep(20)
                     continue
 
-                test_results.append((res, test_case))
+                test_results.append((test_result, test_case))
                 # wait before starting the next round
                 print("Test case ended, waiting the webapp to recover.")
                 time.sleep(20)

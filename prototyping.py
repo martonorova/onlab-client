@@ -19,8 +19,8 @@ import matplotlib.pyplot as plt
 @click.option('--predict-num', default=1,
               help="Number of predicted values")
 def cli(pattern_row, input_len, predict_num):
-    data_frame = read_csv('data/train_1.csv', header=0, index_col=0)
-    series = data_frame.iloc[pattern_row+1]
+    data_frame = read_csv('data/train_1_row_1.csv', header=0, index_col=0)
+    series = data_frame.iloc[pattern_row]
     print(series)
 
     # autocorrelation_plot(series)
