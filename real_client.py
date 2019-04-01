@@ -52,35 +52,17 @@ def run_predict(pattern_row, input_len, predict_num, ar, i, ma):
 
 
 def predict(series, pattern_row, input_len, predict_num, ar, ir, ma):
-    print(series)
-    #  data_frame = read_csv('data/train_1.csv', header=0, index_col=0)
-    # series = data_frame.iloc[pattern_row]
 
     if input_len > series.size:
         input_len = series.size
         print("Input length changed to {}".format(input_len))
 
     start_time = time.time()
-    interval = 10  # 10 sec
-
-    for i in range(input_len):
-        try:
-            request_num = int(series.iloc[i])
-        except IndexError:
-            print("{} is not a valid index.".format(i))
-            break
-
-        time_to_wait = interval / request_num
-
-        for k in range(request_num):
-            requests.get(webapp_url)
-            time.sleep(time_to_wait)
+    generate_load(series, input_len)
 
     elapsed_time = math.ceil(time.time() - start_time)
 
-    metrics = requests.get("http://localhost:9090/api/v1/query?query=free_worker_threads[{}s]".format(elapsed_time))
-
-    values = [int(record[1]) for record in metrics.json().get('data').get('result')[0].get('values')]
+    values = get_metric_values(elapsed_time)
 
     learning_values = values[:-predict_num]
 
@@ -110,20 +92,21 @@ def generate_load(series, input_len):
             print("{} is not a valid index.".format(i))
             break
 
-        time_to_wait = interval / request_num
-
         for k in range(request_num):
             requests.get(webapp_url)
-            time.sleep(time_to_wait)
+
+        time.sleep(interval)
 
 
 def get_metric_values(elapsed_time):
 
+    average_query = "sum(sum_over_time(free_worker_threads[10s])) / sum(count_over_time(free_worker_threads[10s]))"
+
     metrics = requests.get("http://localhost:9090/api/v1/query?query=free_worker_threads[{}s]".format(elapsed_time))
+    # metrics = requests.get("http://localhost:9090/api/v1/query?query=" + average_query)
     values = [int(record[1]) for record in metrics.json().get('data').get('result')[0].get('values')]
 
     return values
-
 
 
 def get_predicted_values(series, input_len, predict_num, ar, ir, ma):
@@ -138,7 +121,7 @@ def get_predicted_values(series, input_len, predict_num, ar, ir, ma):
 
     metric_values = get_metric_values(elapsed_time)
 
-    model = ARIMA(np.asarray(metric_values), order=(ar, ir, ma))
+    model = ARIMA(np.asarray(metric_values), order=(ar, ir, ma))  # this uses all the values to learn
 
     model_fit = model.fit(disp=0)
 
@@ -158,6 +141,7 @@ def get_predicted_values(series, input_len, predict_num, ar, ir, ma):
 # loop, that reads input_len data from wiki_data then predicts the next 'predict_num' values and stores it for the next iteration
 def run_loop():
     series = load_input_data_series()
+
 
 
 
