@@ -60,8 +60,9 @@ def predict(series, pattern_row, input_len, predict_num, ar, ir, ma):
         input_len = series.size
         print("Input length changed to {}".format(input_len))
 
-    interval = 10  # 10 sec
     start_time = time.time()
+    interval = 10  # 10 sec
+
     for i in range(input_len):
         try:
             request_num = int(series.iloc[i])
@@ -100,6 +101,64 @@ def predict(series, pattern_row, input_len, predict_num, ar, ir, ma):
     return predicted_values, actual_values, smape(predicted_values, actual_values)
 
 
+def generate_load(series, input_len):
+    interval = 10  # 10 sec
+    for i in range(input_len):
+        try:
+            request_num = int(series.iloc[i])
+        except IndexError:
+            print("{} is not a valid index.".format(i))
+            break
+
+        time_to_wait = interval / request_num
+
+        for k in range(request_num):
+            requests.get(webapp_url)
+            time.sleep(time_to_wait)
+
+
+def get_metric_values(elapsed_time):
+
+    metrics = requests.get("http://localhost:9090/api/v1/query?query=free_worker_threads[{}s]".format(elapsed_time))
+    values = [int(record[1]) for record in metrics.json().get('data').get('result')[0].get('values')]
+
+    return values
+
+
+
+def get_predicted_values(series, input_len, predict_num, ar, ir, ma):
+
+    if input_len > series.size:
+        input_len = series.size
+        print("Input length changed to {}".format(input_len))
+
+    start_time = time.time()
+    generate_load(series, input_len)
+    elapsed_time = math.ceil(time.time() - start_time)
+
+    metric_values = get_metric_values(elapsed_time)
+
+    model = ARIMA(np.asarray(metric_values), order=(ar, ir, ma))
+
+    model_fit = model.fit(disp=0)
+
+    # round the predicted values to integers
+    predicted_values = [round(pv) for pv in model_fit.forecast(predict_num)[0]]
+
+    print(predicted_values)
+    return predicted_values
+
+@cli.command()
+@click.option('--pattern-row', default=0)
+@click.option('--input-len', default=10)
+@click.option('--predict-num', default=1)
+@click.option('--ar', default=4)
+@click.option('--ir', default=0)
+@click.option('--ma', default=2)
+# loop, that reads input_len data from wiki_data then predicts the next 'predict_num' values and stores it for the next iteration
+def run_loop():
+    series = load_input_data_series()
+
 
 
 #############################################
@@ -126,26 +185,6 @@ class ARIMATestCase(object):
         self.input_len = input_len
         self.predict_num = predict_num
 
-    # def test(self):
-    #     print("pr: {}, il: {}, pn: {}, AR: {}, I: {}, MA: {}".format(
-    #         self.pattern_row,
-    #         self.input_len,
-    #         self.predict_num,
-    #         self.AR,
-    #         self.I,
-    #         self.MA
-    #     ))
-    #     res = predict(self.pattern_row,
-    #                   self.input_len,
-    #                   self.predict_num,
-    #                   self.AR,
-    #                   self.I,
-    #                   self.MA)
-    #
-    #     return ARIMATestResult(predicted_values=res[0],
-    #                            actual_values=res[1],
-    #                            smape=res[2])
-
     def __str__(self):
         return "patt_row: {}, input_len: {}, predict_num: {}, || AR: {}, I: {}, MA: {}".format(
             self.pattern_row,
@@ -161,18 +200,17 @@ class ARIMATestCase(object):
 def run_tests():
     pattern_row = 0
     series = load_input_data_series(pattern_row)
-    # data_frame = read_csv('data/train_1.csv', header=0, index_col=0)
-
-    # series = data_frame.iloc[pattern_row]
 
     test_results = list()
+
+    input_len = 5
+    predict_num = 5
 
     for ar in range(1, 6):
         for i in range(2):
             for ma in range(4):
                 print("Test case started.")
-                input_len = 5
-                predict_num = 5
+
 
                 test_case = ARIMATestCase(pattern_row=pattern_row,
                                                   input_len=input_len,
@@ -181,7 +219,6 @@ def run_tests():
                                                   I=i,
                                                   MA=ma)
                 try:
-                    # res = test_case.test()
                     print("pr: {}, il: {}, pn: {}, AR: {}, I: {}, MA: {}".format(
                                  pattern_row,
                                  input_len,
@@ -216,10 +253,9 @@ def run_tests():
 
     test_results.sort(key=lambda record: record[0].smape)
     print("CREATE/OPEN FILE")
-    file = open("test_results.txt", "w")
+    file = open("test_results" + "_" + str(input_len) + "_" + str(predict_num) + ".txt", "w")
     for result in test_results:
         file.write(str(result[0]) + ' || ' + str(result[1]) + '\n')
-        #file.write(str(result))
 
     file.close()
     print("FILE CLOSED")

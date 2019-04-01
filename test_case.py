@@ -71,7 +71,7 @@ def run_tests():
                 test_results.append((res, test_case))
 
     test_results.sort(key=lambda record: record[0].smape)
-    file = open("test_results.txt", "w")
+    file = open("test_results_5_5.txt", "w")
     for result in test_results:
         file.write(str(result))
 
