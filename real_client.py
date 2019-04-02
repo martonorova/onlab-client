@@ -12,6 +12,69 @@ from statsmodels.tsa.arima_model import ARIMA
 webapp_url = os.getenv("ONLAB_WEBAPP_URL", "http://localhost:8080/time")
 
 
+class Controller(object):
+    predicted_values = list()  # holds the predicted values for the next iteration to calculate error
+    predictions_num = 0  # how many times did the prediction has run so far
+
+    def start(self, ar, ir, ma, predict_num):
+        pattern_row = 0
+        series = load_input_data_series(pattern_row)
+
+        # generate load
+        interval = 10  # 10 seconds
+        for i in range(series.size):
+
+            request_num = int(series.iloc[i])
+
+            for j in range(request_num):
+                requests.get(webapp_url)
+
+            if i >= 10:
+                predict_start = time.time()
+                learning_interval = 100  # get metric of last 100 secs
+                metrics = requests.get(
+                    "http://localhost:9090/api/v1/query?query=free_worker_threads[{}s]".format(learning_interval))
+                metric_values = [int(record[1]) for record in metrics.json().get('data').get('result')[0].get('values')]
+                print("Metric values: {} at {}".format(metric_values, time.ctime()))
+
+                # check error of last prediction
+                if len(self.predicted_values) != 0:
+                    previous_predicted_values = self.predicted_values
+                    actual_values = metric_values[-len(previous_predicted_values):]
+                    assert len(previous_predicted_values) == len(actual_values)
+                    smape_val = smape(previous_predicted_values, actual_values)
+                    print("Prev predicted: {}, Actual: {} || SMAPE: {}".format(
+                        previous_predicted_values,
+                        actual_values,
+                        smape_val
+                    ))
+
+                try:
+                    model = ARIMA(np.asarray(metric_values), order=(ar, ir, ma))  # this uses all the values to learn
+                    model_fit = model.fit(disp=0)
+                except Exception as e:
+                    print(e)
+                    predict_end = time.time()
+
+                    time_to_wait = interval - (predict_end + predict_start)
+                    print("TIME TO WAIT: {}s".format(time_to_wait))
+                    time.sleep(time_to_wait)
+                    continue
+
+
+
+                # round the predicted values to integers
+                self.predicted_values = [round(pv) for pv in model_fit.forecast(predict_num)[0]]
+                print("Predicted: {} at {}".format(self.predicted_values, time.ctime()))
+                predict_end = time.time()
+
+                time_to_wait = interval - (predict_end - predict_start)
+                print("TIME TO WAIT: {}s".format(time_to_wait))
+                time.sleep(time_to_wait)
+            else:
+                time.sleep(interval)
+
+
 def load_input_data_series(pattern_row):
     data_frame = read_csv('data/train_1_row_1.csv', header=0, index_col=0)
     return data_frame.iloc[pattern_row]
@@ -246,6 +309,7 @@ def run_tests():
 
 
 if __name__ == '__main__':
-    cli()
+    #cli()
+    Controller().start(4, 0, 2, 10)
 
 
