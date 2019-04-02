@@ -16,6 +16,7 @@ class Controller(object):
     predicted_values = list()  # holds the predicted values for the next iteration to calculate error
     predictions_num = 0  # how many times did the prediction has run so far
 
+
     def start(self, ar, ir, ma, predict_num):
         pattern_row = 0
         series = load_input_data_series(pattern_row)
@@ -31,6 +32,7 @@ class Controller(object):
 
             if i >= 10:
                 predict_start = time.time()
+                print("PREDICT START: {}".format(time.ctime()))
                 learning_interval = 100  # get metric of last 100 secs
                 metrics = requests.get(
                     "http://localhost:9090/api/v1/query?query=free_worker_threads[{}s]".format(learning_interval))
@@ -56,8 +58,8 @@ class Controller(object):
                     print(e)
                     predict_end = time.time()
 
-                    time_to_wait = interval - (predict_end + predict_start)
-                    print("TIME TO WAIT: {}s".format(time_to_wait))
+                    time_to_wait = interval - (predict_end - predict_start)
+                    print("TIME TO WAIT EXC: {}s".format(time_to_wait))
                     time.sleep(time_to_wait)
                     continue
 
