@@ -7,17 +7,53 @@ from pandas import read_csv
 import time
 import math
 from statsmodels.tsa.arima_model import ARIMA
+import matplotlib.pyplot as plt
 
 
 webapp_url = os.getenv("ONLAB_WEBAPP_URL", "http://localhost:8080/time")
 
 
 class Controller(object):
+
     predicted_values = list()  # holds the predicted values for the next iteration to calculate error
     predictions_num = 0  # how many times did the prediction has run so far
+    average_smape = 0
+    smape_samples_num = 0
+
+    predicted_values_to_plot = list()
+    actual_values_to_plot = list()
+    should_draw_plot = False
+
+    def __init__(self, predict_model, should_draw_plot):
+        self.predict_model = predict_model
+        self.should_draw_plot = should_draw_plot
 
 
-    def start(self, ar, ir, ma, predict_num):
+    def calculate_avg_smape(self, new_smape):
+        if not math.isnan(new_smape):
+            new_avg_smape = (self.average_smape * self.smape_samples_num + new_smape) / (self.smape_samples_num + 1)
+            self.smape_samples_num += 1
+            self.average_smape = new_avg_smape
+
+    def save_values_to_plot(self, predicted_list, actual_list):
+        assert len(predicted_list) == len(actual_list)
+        length = len(predicted_list)
+
+        for i in range(length):
+            # next_pred_value = predicted_list[i]
+            # if math.isnan(next_pred_value):
+            #     self.predicted_values_to_plot.append()
+            self.predicted_values_to_plot.append(predicted_list[i])
+            self.actual_values_to_plot.append(actual_list[i])
+
+    def draw_plot(self):
+        plt.plot(self.predicted_values_to_plot, 'r')
+        plt.plot(self.actual_values_to_plot, 'b')
+        plt.draw()
+        plt.pause(1)
+        plt.clf()
+
+    def start(self, ar, ir, ma, predict_num, learning_interval):
         pattern_row = 0
         series = load_input_data_series(pattern_row)
 
@@ -30,10 +66,10 @@ class Controller(object):
             for j in range(request_num):
                 requests.get(webapp_url)
 
-            if i >= 10:
+            if i >= int(learning_interval / interval):
                 predict_start = time.time()
                 print("PREDICT START: {}".format(time.ctime()))
-                learning_interval = 100  # get metric of last 100 secs
+
                 metrics = requests.get(
                     "http://localhost:9090/api/v1/query?query=free_worker_threads[{}s]".format(learning_interval))
                 metric_values = [int(record[1]) for record in metrics.json().get('data').get('result')[0].get('values')]
@@ -43,17 +79,31 @@ class Controller(object):
                 if len(self.predicted_values) != 0:
                     previous_predicted_values = self.predicted_values
                     actual_values = metric_values[-len(previous_predicted_values):]
+
                     assert len(previous_predicted_values) == len(actual_values)
+
                     smape_val = smape(previous_predicted_values, actual_values)
-                    print("Prev predicted: {}, Actual: {} || SMAPE: {}".format(
+
+                    self.save_values_to_plot(previous_predicted_values, actual_values)
+
+                    if self.should_draw_plot:
+                        self.draw_plot()
+
+                    self.calculate_avg_smape(smape_val)
+
+                    print("Prev predicted: {}, Actual: {} || SMAPE: {}, AVG_SMAPE: {}".format(
                         previous_predicted_values,
                         actual_values,
-                        smape_val
+                        smape_val,
+                        self.average_smape
                     ))
 
                 try:
-                    model = ARIMA(np.asarray(metric_values), order=(ar, ir, ma))  # this uses all the values to learn
-                    model_fit = model.fit(disp=0)
+                    # model = ARIMA(np.asarray(metric_values), order=(ar, ir, ma))
+                    # model_fit = model.fit(disp=0)
+                    # # round the predicted values to integers
+                    # self.predicted_values = [round(pv) for pv in model_fit.forecast(predict_num)[0]]
+                    self.predicted_values = self.predict_model.forecast(metric_values, predict_num)
                 except Exception as e:
                     print(e)
                     predict_end = time.time()
@@ -64,9 +114,6 @@ class Controller(object):
                     continue
 
 
-
-                # round the predicted values to integers
-                self.predicted_values = [round(pv) for pv in model_fit.forecast(predict_num)[0]]
                 print("Predicted: {} at {}".format(self.predicted_values, time.ctime()))
                 predict_end = time.time()
 
@@ -91,6 +138,28 @@ def smape(predicted_list, actual_list):
         sum_val += nominator / denominator
 
     return sum_val / len(predicted_list)
+
+
+class ARIMAPredict(object):
+    input_values = list()
+
+    def __init__(self, ar, ir, ma):
+        self.ar = ar
+        self.ir = ir
+        self.ma = ma
+
+    def forecast(self, input_values, predict_num):
+        model = ARIMA(np.asarray(input_values), order=(self.ar, self.ir, self.ma))
+        model_fit = model.fit(disp=0)
+
+        # round the predicted values to integers
+        predicted_values = [round(pv) for pv in model_fit.forecast(predict_num)[0]]
+
+        return predicted_values
+
+class MovingAveragePredict(object):
+    input_values = list()
+
 
 
 @click.group()
@@ -312,6 +381,7 @@ def run_tests():
 
 if __name__ == '__main__':
     #cli()
-    Controller().start(4, 0, 2, 10)
+    Controller(predict_model=ARIMAPredict(ar=4, ir=0, ma=2),
+               should_draw_plot=True).start(4, 0, 2, 10, 100)
 
 
