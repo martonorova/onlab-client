@@ -1,6 +1,6 @@
 import click
 from pandas import read_csv
-from . real_client import cli
+from . client_metric import cli
 
 
 class ARIMATestResult(object):

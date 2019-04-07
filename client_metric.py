@@ -157,8 +157,19 @@ class ARIMAPredict(object):
 
         return predicted_values
 
+
 class MovingAveragePredict(object):
     input_values = list()
+    # window
+
+    def forecast(self, input_values, predict_num):
+        input_series = pandas.Series(data=input_values)
+
+        moving_avg = input_series.rolling(window=10).mean()
+
+        predicted_values = [moving_avg for i in range(predict_num)]
+
+
 
 
 
@@ -265,122 +276,10 @@ def get_predicted_values(series, input_len, predict_num, ar, ir, ma):
     print(predicted_values)
     return predicted_values
 
-@cli.command()
-@click.option('--pattern-row', default=0)
-@click.option('--input-len', default=10)
-@click.option('--predict-num', default=1)
-@click.option('--ar', default=4)
-@click.option('--ir', default=0)
-@click.option('--ma', default=2)
-# loop, that reads input_len data from wiki_data then predicts the next 'predict_num' values and stores it for the next iteration
-def run_loop():
-    series = load_input_data_series()
-
-
-
-
-#############################################
-# TEST
-#############################################
-
-
-class ARIMATestResult(object):
-    def __init__(self, predicted_values, actual_values, smape):
-        self.actual_values = actual_values
-        self.predicted_values = predicted_values
-        self.smape = smape
-
-    def __str__(self):
-        return "SMAPE: {}".format(self.smape)
-
-
-class ARIMATestCase(object):
-    def __init__(self, pattern_row, input_len, predict_num, AR, I, MA):
-        self.AR = AR
-        self.I = I
-        self.MA = MA
-        self.pattern_row = pattern_row
-        self.input_len = input_len
-        self.predict_num = predict_num
-
-    def __str__(self):
-        return "patt_row: {}, input_len: {}, predict_num: {}, || AR: {}, I: {}, MA: {}".format(
-            self.pattern_row,
-            self.input_len,
-            self.predict_num,
-            self.AR,
-            self.I,
-            self.MA
-        )
-
-
-@cli.command()
-def run_tests():
-    pattern_row = 0
-    series = load_input_data_series(pattern_row)
-
-    test_results = list()
-
-    input_len = 5
-    predict_num = 5
-
-    for ar in range(1, 6):
-        for i in range(2):
-            for ma in range(4):
-                print("Test case started.")
-
-
-                test_case = ARIMATestCase(pattern_row=pattern_row,
-                                                  input_len=input_len,
-                                                  predict_num=predict_num,
-                                                  AR=ar,
-                                                  I=i,
-                                                  MA=ma)
-                try:
-                    print("pr: {}, il: {}, pn: {}, AR: {}, I: {}, MA: {}".format(
-                                 pattern_row,
-                                 input_len,
-                                 predict_num,
-                                 ar,
-                                 i,
-                                 ma
-                             ))
-                    res = predict(series,
-                                  test_case.pattern_row,
-                                  test_case.input_len,
-                                  test_case.predict_num,
-                                  test_case.AR,
-                                  test_case.I,
-                                  test_case.MA)
-
-                    test_result = ARIMATestResult(
-                        predicted_values=res[0],
-                        actual_values=res[1],
-                        smape=res[2]
-                    )
-                except Exception as e:
-                    print(e)
-                    print("Test case ended, waiting the webapp to recover.")
-                    time.sleep(20)
-                    continue
-
-                test_results.append((test_result, test_case))
-                # wait before starting the next round
-                print("Test case ended, waiting the webapp to recover.")
-                time.sleep(20)
-
-    test_results.sort(key=lambda record: record[0].smape)
-    print("CREATE/OPEN FILE")
-    file = open("test_results" + "_" + str(input_len) + "_" + str(predict_num) + ".txt", "w")
-    for result in test_results:
-        file.write(str(result[0]) + ' || ' + str(result[1]) + '\n')
-
-    file.close()
-    print("FILE CLOSED")
-
 
 if __name__ == '__main__':
     #cli()
+    print(time.ctime())
     Controller(predict_model=ARIMAPredict(ar=4, ir=0, ma=2),
                should_draw_plot=True).start(4, 0, 2, 10, 100)
 
