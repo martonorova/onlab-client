@@ -48,7 +48,7 @@ def cli(pattern_row, input_len, predict_num):
     plt.plot(np.convolve(actual_values, np.ones((10,))/10, mode='valid'), 'b')
 
     ema_series = pandas.Series(data=actual_values)
-    ema = ema_series.ewm(span=5, adjust=False, min_periods=10).mean().to_list()
+    ema = ema_series.ewm(span=10, adjust=False, min_periods=10).mean().to_list()
     # EMA
     ema.insert(0, math.nan)
     plt.plot(ema[10:], 'r')

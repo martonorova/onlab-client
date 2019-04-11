@@ -53,7 +53,7 @@ class Controller(object):
         plt.pause(1)
         plt.clf()
 
-    def start(self, ar, ir, ma, predict_num, learning_interval):
+    def start(self, predict_num, learning_interval):
         pattern_row = 0
         series = load_input_data_series(pattern_row)
 
@@ -170,117 +170,112 @@ class MovingAveragePredict(object):
         predicted_values = [moving_avg for i in range(predict_num)]
 
 
-
-
-
-@click.group()
-def cli():
-    pass
-
-
-@cli.command()
-@click.option('--pattern-row', default=0,
-              help="Select the row of input data to use to generate load")
-@click.option('--input-len', default=100,
-              help="Length of input data")
-@click.option('--predict-num', default=1,
-              help="Number of predicted values")
-@click.option('--ar', default=5,
-              help="Autoregressive component of the ARIMA model")
-@click.option('--i', default=1,
-              help="Integrated component of the ARIMA model")
-@click.option('--ma', default=0,
-              help="Moving average component of the ARIMA model")
-def run_predict(pattern_row, input_len, predict_num, ar, i, ma):
-    series = load_input_data_series(pattern_row)
-    predict(series, pattern_row, input_len, predict_num, ar, i, ma)
-
-
-def predict(series, pattern_row, input_len, predict_num, ar, ir, ma):
-
-    if input_len > series.size:
-        input_len = series.size
-        print("Input length changed to {}".format(input_len))
-
-    start_time = time.time()
-    generate_load(series, input_len)
-
-    elapsed_time = math.ceil(time.time() - start_time)
-
-    values = get_metric_values(elapsed_time)
-
-    learning_values = values[:-predict_num]
-
-    learning_series = pandas.Series(learning_values)
-    # fit model
-    model = ARIMA(np.asarray(learning_series), order=(ar, ir, ma))
-    model_fit = model.fit(disp=0)
-
-    print(model_fit.forecast(predict_num)[0])
-    # round the predicted values to integers
-    predicted_values = [round(pv) for pv in model_fit.forecast(predict_num)[0]]
-
-    actual_values = values[-predict_num:]
-
-    print("Predicted: {}, Actual: {}, SMAPE: {}"
-          .format(predicted_values, actual_values, smape(predicted_values, actual_values)))
-
-    return predicted_values, actual_values, smape(predicted_values, actual_values)
-
-
-def generate_load(series, input_len):
-    interval = 10  # 10 sec
-    for i in range(input_len):
-        try:
-            request_num = int(series.iloc[i])
-        except IndexError:
-            print("{} is not a valid index.".format(i))
-            break
-
-        for k in range(request_num):
-            requests.get(webapp_url)
-
-        time.sleep(interval)
-
-
-def get_metric_values(elapsed_time):
-
-    average_query = "sum(sum_over_time(free_worker_threads[10s])) / sum(count_over_time(free_worker_threads[10s]))"
-
-    metrics = requests.get("http://localhost:9090/api/v1/query?query=free_worker_threads[{}s]".format(elapsed_time))
-    # metrics = requests.get("http://localhost:9090/api/v1/query?query=" + average_query)
-    values = [int(record[1]) for record in metrics.json().get('data').get('result')[0].get('values')]
-
-    return values
-
-
-def get_predicted_values(series, input_len, predict_num, ar, ir, ma):
-
-    if input_len > series.size:
-        input_len = series.size
-        print("Input length changed to {}".format(input_len))
-
-    start_time = time.time()
-    generate_load(series, input_len)
-    elapsed_time = math.ceil(time.time() - start_time)
-
-    metric_values = get_metric_values(elapsed_time)
-
-    model = ARIMA(np.asarray(metric_values), order=(ar, ir, ma))  # this uses all the values to learn
-
-    model_fit = model.fit(disp=0)
-
-    # round the predicted values to integers
-    predicted_values = [round(pv) for pv in model_fit.forecast(predict_num)[0]]
-
-    print(predicted_values)
-    return predicted_values
+# @click.group()
+# def cli():
+#     pass
+#
+#
+# @cli.command()
+# @click.option('--pattern-row', default=0,
+#               help="Select the row of input data to use to generate load")
+# @click.option('--input-len', default=100,
+#               help="Length of input data")
+# @click.option('--predict-num', default=1,
+#               help="Number of predicted values")
+# @click.option('--ar', default=5,
+#               help="Autoregressive component of the ARIMA model")
+# @click.option('--i', default=1,
+#               help="Integrated component of the ARIMA model")
+# @click.option('--ma', default=0,
+#               help="Moving average component of the ARIMA model")
+# def run_predict(pattern_row, input_len, predict_num, ar, i, ma):
+#     series = load_input_data_series(pattern_row)
+#     predict(series, pattern_row, input_len, predict_num, ar, i, ma)
+#
+#
+# def predict(series, pattern_row, input_len, predict_num, ar, ir, ma):
+#
+#     if input_len > series.size:
+#         input_len = series.size
+#         print("Input length changed to {}".format(input_len))
+#
+#     start_time = time.time()
+#     generate_load(series, input_len)
+#
+#     elapsed_time = math.ceil(time.time() - start_time)
+#
+#     values = get_metric_values(elapsed_time)
+#
+#     learning_values = values[:-predict_num]
+#
+#     learning_series = pandas.Series(learning_values)
+#     # fit model
+#     model = ARIMA(np.asarray(learning_series), order=(ar, ir, ma))
+#     model_fit = model.fit(disp=0)
+#
+#     print(model_fit.forecast(predict_num)[0])
+#     # round the predicted values to integers
+#     predicted_values = [round(pv) for pv in model_fit.forecast(predict_num)[0]]
+#
+#     actual_values = values[-predict_num:]
+#
+#     print("Predicted: {}, Actual: {}, SMAPE: {}"
+#           .format(predicted_values, actual_values, smape(predicted_values, actual_values)))
+#
+#     return predicted_values, actual_values, smape(predicted_values, actual_values)
+#
+#
+# def generate_load(series, input_len):
+#     interval = 10  # 10 sec
+#     for i in range(input_len):
+#         try:
+#             request_num = int(series.iloc[i])
+#         except IndexError:
+#             print("{} is not a valid index.".format(i))
+#             break
+#
+#         for k in range(request_num):
+#             requests.get(webapp_url)
+#
+#         time.sleep(interval)
+#
+#
+# def get_metric_values(elapsed_time):
+#
+#     average_query = "sum(sum_over_time(free_worker_threads[10s])) / sum(count_over_time(free_worker_threads[10s]))"
+#
+#     metrics = requests.get("http://localhost:9090/api/v1/query?query=free_worker_threads[{}s]".format(elapsed_time))
+#     # metrics = requests.get("http://localhost:9090/api/v1/query?query=" + average_query)
+#     values = [int(record[1]) for record in metrics.json().get('data').get('result')[0].get('values')]
+#
+#     return values
+#
+#
+# def get_predicted_values(series, input_len, predict_num, ar, ir, ma):
+#
+#     if input_len > series.size:
+#         input_len = series.size
+#         print("Input length changed to {}".format(input_len))
+#
+#     start_time = time.time()
+#     generate_load(series, input_len)
+#     elapsed_time = math.ceil(time.time() - start_time)
+#
+#     metric_values = get_metric_values(elapsed_time)
+#
+#     model = ARIMA(np.asarray(metric_values), order=(ar, ir, ma))  # this uses all the values to learn
+#
+#     model_fit = model.fit(disp=0)
+#
+#     # round the predicted values to integers
+#     predicted_values = [round(pv) for pv in model_fit.forecast(predict_num)[0]]
+#
+#     print(predicted_values)
+#     return predicted_values
 
 
 if __name__ == '__main__':
     #cli()
     print(time.ctime())
     Controller(predict_model=ARIMAPredict(ar=4, ir=0, ma=2),
-               should_draw_plot=True).start(4, 0, 2, 10, 100)
-
-
+               should_draw_plot=True).start(10, 100)
