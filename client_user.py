@@ -124,6 +124,6 @@ class ControllerUserPredict(object):
 
 if __name__ == '__main__':
 
-    ControllerUserPredict('ma').start(
+    ControllerUserPredict('arima').start(
         150
     )

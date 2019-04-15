@@ -8,6 +8,7 @@ import time
 import math
 from statsmodels.tsa.arima_model import ARIMA
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 
 webapp_url = os.getenv("ONLAB_WEBAPP_URL", "http://localhost:8080/time")
@@ -28,7 +29,6 @@ class Controller(object):
         self.predict_model = predict_model
         self.should_draw_plot = should_draw_plot
 
-
     def calculate_avg_smape(self, new_smape):
         if not math.isnan(new_smape):
             new_avg_smape = (self.average_smape * self.smape_samples_num + new_smape) / (self.smape_samples_num + 1)
@@ -47,8 +47,35 @@ class Controller(object):
             self.actual_values_to_plot.append(actual_list[i])
 
     def draw_plot(self):
-        plt.plot(self.predicted_values_to_plot, 'r')
-        plt.plot(self.actual_values_to_plot, 'b')
+
+        mpl.rcParams['lines.linewidth'] = 7
+        font = {
+            'family': 'normal',
+            'weight': 'bold',
+            'size': 30,
+        }
+        mpl.rc('font', **font)
+
+
+        predicted_series = pandas.Series(data=self.predicted_values_to_plot)
+        actual_series = pandas.Series(data=self.actual_values_to_plot)
+
+        predicted_series.plot(legend=True, label='Predicted')
+        actual_series.plot(legend=True, label='Actual')
+
+        plt.xlabel('time (s)')
+        plt.ylabel('active threads')
+
+        if type(self.predict_model) is ARIMAPredict:
+            title = 'ARIMA'
+        elif type(self.predict_model) is MAPredict:
+            title = 'MA'
+        elif type(self.predict_model) is EMAPredict:
+            title = 'EMA'
+
+        plt.title(title)
+
+
         plt.draw()
         plt.pause(1)
         plt.clf()
@@ -71,7 +98,7 @@ class Controller(object):
                 print("PREDICT START: {}".format(time.ctime()))
 
                 metrics = requests.get(
-                    "http://localhost:9090/api/v1/query?query=free_worker_threads[{}s]".format(learning_interval))
+                    "http://localhost:9090/api/v1/query?query=active_worker_threads[{}s]".format(learning_interval))
                 metric_values = [int(record[1]) for record in metrics.json().get('data').get('result')[0].get('values')]
                 print("Metric values: {} at {}".format(metric_values, time.ctime()))
 
@@ -141,7 +168,7 @@ def smape(predicted_list, actual_list):
 
 
 class ARIMAPredict(object):
-    input_values = list()
+    # input_values = list()
 
     def __init__(self, ar, ir, ma):
         self.ar = ar
@@ -156,6 +183,35 @@ class ARIMAPredict(object):
         predicted_values = [round(pv) for pv in model_fit.forecast(predict_num)[0]]
 
         return predicted_values
+
+
+class MAPredict(object):
+    def __init__(self, window):
+        self.window = window
+
+    def forecast(self, input_values, predict_num):
+
+        if len(input_values) < self.window:
+            self.window = len(input_values)
+
+        input_series = pandas.Series(data=input_values)
+        ma = input_series.iloc[-self.window:].mean()
+
+        return [ma for i in range(predict_num)]
+
+
+class EMAPredict(object):
+    def __init__(self, window):
+        self.window = window
+
+    def forecast(self, input_values, predict_num):
+        if len(input_values) < self.window:
+            self.window = len(input_values)
+
+        input_series = pandas.Series(data=input_values)
+        ema = input_series.ewm(span=10, min_periods=self.window).mean().to_list()
+        predicted_value = ema[len(ema) - 1]
+        return [predicted_value for i in range(predict_num)]
 
 
 class MovingAveragePredict(object):
@@ -275,7 +331,9 @@ class MovingAveragePredict(object):
 
 
 if __name__ == '__main__':
-    #cli()
-    print(time.ctime())
     Controller(predict_model=ARIMAPredict(ar=4, ir=0, ma=2),
                should_draw_plot=True).start(10, 100)
+    # Controller(predict_model=MAPredict(window=10),
+    #            should_draw_plot=True).start(10, 100)
+    # Controller(predict_model=EMAPredict(window=10),
+    #            should_draw_plot=True).start(10, 100)
